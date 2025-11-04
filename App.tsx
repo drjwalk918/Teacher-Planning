@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { LessonPlanFormParams, LessonPlan } from './types';
 import { generateLessonPlan } from './services/geminiService';
@@ -21,7 +20,8 @@ const App: React.FC = () => {
       setLessonPlan(plan);
     } catch (err) {
       console.error(err);
-      setError('Failed to generate the lesson plan. Please check your API key and try again.');
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.';
+      setError(`Failed to generate the lesson plan. ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
@@ -77,6 +77,11 @@ const App: React.FC = () => {
         </main>
         <footer className="text-center mt-12 text-gray-500 text-sm">
           <p>Powered by Google Gemini API</p>
+          <div className="mt-4">
+            <p>Created in collaboration with:</p>
+            <p className="font-semibold">Dr. Justin Walker, Director of Technology</p>
+            <p className="font-semibold">Muskogee Public Schools</p>
+          </div>
         </footer>
       </div>
     </div>

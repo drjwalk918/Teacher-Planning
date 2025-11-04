@@ -1,7 +1,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { LessonPlanFormParams, LessonPlan, GraphicOrganizer } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+// This function centralizes client creation and API key validation.
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  // Check if the API key is missing, the literal string 'undefined', or an empty string.
+  if (!apiKey || apiKey === 'undefined' || !apiKey.trim()) {
+    throw new Error("API key not found or invalid. Please ensure it is configured correctly in your environment.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 const rubricSchema = {
     type: Type.OBJECT,
@@ -149,6 +157,7 @@ export const generateLessonPlan = async (params: LessonPlanFormParams): Promise<
   `;
 
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
@@ -163,8 +172,8 @@ export const generateLessonPlan = async (params: LessonPlanFormParams): Promise<
     const parsedPlan: LessonPlan = JSON.parse(jsonText);
     return parsedPlan;
   } catch (error) {
-    console.error("Error generating lesson plan from Gemini API:", error);
-    throw new Error("API call failed. Please check the console for more details.");
+    console.error("Error in generateLessonPlan:", error);
+    throw error; // Re-throw to be caught by the UI component
   }
 };
 
@@ -181,6 +190,7 @@ export const generateGraphicOrganizer = async (description: string, topic: strin
   `;
 
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
@@ -194,7 +204,7 @@ export const generateGraphicOrganizer = async (description: string, topic: strin
     const jsonText = response.text.trim();
     return JSON.parse(jsonText);
   } catch (error) {
-    console.error("Error generating graphic organizer from Gemini API:", error);
-    throw new Error("Failed to generate the graphic organizer.");
+    console.error("Error in generateGraphicOrganizer:", error);
+    throw error; // Re-throw to be caught by the UI component
   }
 };
