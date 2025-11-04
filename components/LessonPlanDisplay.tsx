@@ -1,9 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { LessonPlan, DailyPlan, GraphicOrganizer } from '../types';
 import { generateGraphicOrganizer } from '../services/geminiService';
 import GraphicOrganizerModal from './GraphicOrganizerModal';
 import GradingRubricDisplay from './GradingRubricDisplay';
-import { BookOpenIcon, VideoCameraIcon, CollectionIcon, LightBulbIcon, UsersIcon, ChatAlt2Icon, SparklesIcon, ClipboardCheckIcon, DownloadIcon, AcademicCapIcon } from './IconComponents';
+import { BookOpenIcon, VideoCameraIcon, CollectionIcon, LightBulbIcon, UsersIcon, ChatAlt2Icon, SparklesIcon, ClipboardCheckIcon, DownloadIcon, AcademicCapIcon, ClipboardCopyIcon } from './IconComponents';
 
 interface LessonPlanDisplayProps {
   plan: LessonPlan;
@@ -123,6 +123,81 @@ const DailyPlanCard: React.FC<{
     );
 };
 
+const generateHtmlForPlan = (plan: LessonPlan): string => {
+    const styles = `
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; }
+        h1, h2, h3, h4 { font-family: 'Georgia', serif; }
+        h1 { font-size: 28px; color: #4338ca; text-align: center; }
+        h2 { font-size: 22px; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 25px;}
+        h3 { font-size: 18px; color: #334155; margin-top: 20px; }
+        h4 { font-size: 16px; font-weight: bold; margin-bottom: 5px; margin-top: 15px; }
+        ul { list-style-type: disc; margin-left: 20px; padding-left: 5px; }
+        li { margin-bottom: 8px; }
+        p { margin-bottom: 12px; }
+        b { font-weight: bold; }
+        a { color: #4338ca; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        table { border-collapse: collapse; width: 100%; margin-top: 15px; font-size: 14px; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; vertical-align: top; }
+        th { background-color: #f8fafc; font-weight: bold; }
+      </style>
+    `;
+
+    const body = `
+        <h1>${plan.title}</h1>
+        <p>${plan.overview}</p>
+        <p><b>Duration:</b> ${plan.duration}</p>
+        <h2>Learning Objectives</h2>
+        <ul>${plan.learningObjectives.map(o => `<li>${o}</li>`).join('')}</ul>
+        
+        <h2>Daily Breakdown</h2>
+        ${plan.dailyBreakdown.sort((a, b) => a.day - b.day).map(d => `
+            <div>
+                <h3>Day ${d.day}: ${d.topic}</h3>
+                <h4>Activities</h4>
+                <ul>${d.activities.map(a => `<li>${a}</li>`).join('')}</ul>
+                <h4>4 C's Integration</h4>
+                <p><b>Collaboration:</b> ${d.fourCs.collaboration}</p>
+                <p><b>Communication:</b> ${d.fourCs.communication}</p>
+                <p><b>Critical Thinking:</b> ${d.fourCs.criticalThinking}</p>
+                <p><b>Creativity:</b> ${d.fourCs.creativity}</p>
+                <h4>Resources</h4>
+                <p><b>Graphic Organizer:</b> ${d.resources.graphicOrganizer}</p>
+                <p><b>Reading Prompt:</b> ${d.resources.readingPrompt}</p>
+                <p><b>Video Instruction:</b> <a href="${d.resources.videoInstruction.url}" target="_blank">${d.resources.videoInstruction.description}</a></p>
+            </div>
+        `).join('')}
+        
+        <h2>Project Grading Rubric</h2>
+        <h3>${plan.gradingRubric.title}</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Criterion</th>
+                    <th>Exemplary (4)</th>
+                    <th>Proficient (3)</th>
+                    <th>Developing (2)</th>
+                    <th>Beginning (1)</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${plan.gradingRubric.criteria.map(c => `
+                    <tr>
+                        <td>${c.criterion}</td>
+                        <td>${c.levels.exemplary}</td>
+                        <td>${c.levels.proficient}</td>
+                        <td>${c.levels.developing}</td>
+                        <td>${c.levels.beginning}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${plan.title}</title>${styles}</head><body>${body}</body></html>`;
+};
+
 
 const LessonPlanDisplay: React.FC<LessonPlanDisplayProps> = ({ plan }) => {
   const printableContentRef = useRef<HTMLDivElement>(null);
@@ -131,6 +206,16 @@ const LessonPlanDisplay: React.FC<LessonPlanDisplayProps> = ({ plan }) => {
   const [isGeneratingOrganizer, setIsGeneratingOrganizer] = useState<boolean>(false);
   const [organizerForDay, setOrganizerForDay] = useState<number | null>(null);
   const [organizerError, setOrganizerError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<'idle' | 'success' | 'error'>('idle');
+  const copyTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+        if (copyTimeoutRef.current) {
+            clearTimeout(copyTimeoutRef.current);
+        }
+    };
+  }, []);
 
   const handleDownloadPDF = async () => {
     const container = printableContentRef.current;
@@ -220,6 +305,49 @@ const LessonPlanDisplay: React.FC<LessonPlanDisplayProps> = ({ plan }) => {
     }
   };
 
+  const handleExportToDocs = async () => {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    
+    try {
+      const html = generateHtmlForPlan(plan);
+      const blob = new Blob([html], { type: 'text/html' });
+      // The ClipboardItem API is the modern way to handle mixed-content clipboard operations.
+      const data = [new ClipboardItem({ 'text/html': blob })];
+      await navigator.clipboard.write(data);
+      setCopyState('success');
+      copyTimeoutRef.current = window.setTimeout(() => setCopyState('idle'), 3000);
+    } catch (error) {
+        console.error('Failed to copy HTML to clipboard:', error);
+        setCopyState('error');
+        copyTimeoutRef.current = window.setTimeout(() => setCopyState('idle'), 3000);
+    }
+  };
+
+  const getCopyButtonProps = () => {
+    switch (copyState) {
+        case 'success':
+            return {
+                text: 'Copied! Paste in Docs',
+                className: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
+                disabled: true,
+            };
+        case 'error':
+            return {
+                text: 'Copy Failed!',
+                className: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+                disabled: false,
+            };
+        case 'idle':
+        default:
+            return {
+                text: 'Export to Google Docs',
+                className: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+                disabled: false,
+            };
+    }
+  };
+  const copyButtonProps = getCopyButtonProps();
+
 
   return (
     <>
@@ -277,7 +405,17 @@ const LessonPlanDisplay: React.FC<LessonPlanDisplayProps> = ({ plan }) => {
         </section>
       </div>
       
-      <div className="mt-8 pt-6 border-t border-gray-200 flex justify-center">
+      <div className="mt-8 pt-6 border-t border-gray-200 flex justify-center gap-4 flex-wrap">
+        <button
+          onClick={handleExportToDocs}
+          disabled={copyButtonProps.disabled}
+          className={`inline-flex items-center gap-2 px-6 py-3 border border-transparent text-base font-medium rounded-lg shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed transition-colors ${copyButtonProps.className}`}
+          aria-label="Export lesson plan to Google Docs by copying to clipboard"
+        >
+          {copyState === 'idle' && <ClipboardCopyIcon className="w-5 h-5" />}
+          {copyButtonProps.text}
+        </button>
+
         <button
           onClick={handleDownloadPDF}
           disabled={isDownloading}
